@@ -8,10 +8,11 @@
 
 #define ATH_SQ1TW "/org/bluez/hci0/dev_74_45_CE_95_0A_82"
 #define VARMILLO  "/org/bluez/hci0/dev_F3_06_1B_9B_89_22"
+#define OBJECT_PATH_LENGTH 37
 
 #define BUTTON_WIDTH 200
 #define BUTTON_HEIGHT 100
-#define BUTTONS 2
+#define BUTTONS 6
 
 typedef struct Button {
   int x;
@@ -32,6 +33,78 @@ typedef struct Link {
 } Link;
 
 Dictionary *link_dict;
+
+static void on_properties_changed(GDBusProxy *proxy, GVariant *changed_properties, char** invalid_properties, gpointer user_data);
+
+static void on_button_click(char * link_name) {
+  Link *L = (Link *)dict_find_kv(link_name, link_dict);
+  if (L == NULL) return;
+
+  if (L->button->active) {
+    printf("Trying to disconnect %s\n", L->button->link_name);
+    disconnect_proxy_device(L->proxy, NULL);
+  }
+  else {
+    printf("Trying to connect %s\n", L->button->link_name);
+    connect_proxy_device(L->proxy, NULL);
+  }
+}
+
+static void create_device_objects(GVariant *result, Button *button, Link *linker, GDBusProxy **device_proxy) {
+  GVariantIter iter;
+  GVariant *value;
+  gchar *key;
+  int i = 0;
+
+  g_variant_iter_init(&iter, result);
+  while (g_variant_iter_loop(&iter, "{&o@a{sa{sv}}}", &key, &value)) {
+    GVariantIter iiter;
+    gchar *interface_name;
+    GVariant *interface_value;
+    if (strlen(key) == OBJECT_PATH_LENGTH) {
+
+      button[i].x = 10; 
+      button[i].y = 10 + (BUTTON_HEIGHT + 10) * i;
+      button[i].width = BUTTON_WIDTH; 
+      button[i].height = BUTTON_HEIGHT;
+      button[i].link_name = key; 
+      button[i].active_color = GREEN; 
+      button[i].inactive_color = WHITE; 
+      button[i].active = false;
+      button[i].on_click = on_button_click;
+
+      device_proxy[i] = get_proxy_for_device(key);
+      subscribe_to_properties_changed_signal(device_proxy[i], G_CALLBACK(on_properties_changed));
+
+      linker[i].proxy = device_proxy[i];
+      linker[i].button = &button[i];
+
+      g_variant_iter_init(&iiter, value);
+      g_print("Item '%s' has type '%s'\n", key, g_variant_get_type_string(value));
+      while (g_variant_iter_loop(&iiter, "{&s@a{sv}}", &interface_name, &interface_value)) {
+        g_print("\tItem '%s' has type '%s'\n", interface_name, g_variant_get_type_string(interface_value));
+        GVariantIter iiiter;
+        gchar *property_name;
+        GVariant *property_value;
+        g_variant_iter_init(&iiiter, interface_value);
+        while (g_variant_iter_loop(&iiiter, "{sv}", &property_name, &property_value)) {
+          g_print("\t\tItem '%s' has type '%s'\n", property_name, g_variant_get_type_string(property_value));
+          // I'm looping here because I do not yet know how to directly get the properties I would like out of this data structure :(
+          if (strcmp(property_name, "Name") == 0) {
+            sprintf(button[i].text, g_variant_get_string(property_value, NULL));
+          }
+          else if (strcmp(property_name, "Connected") == 0) {
+            button[i].active = g_variant_get_boolean(property_value);
+          }
+        }
+        g_variant_unref(property_value);
+      }
+      i++;
+      g_variant_unref(interface_value);
+    }
+  }
+  g_variant_unref(value);
+}
 
 static void on_properties_changed(GDBusProxy *proxy, GVariant *changed_properties, char** invalid_properties, gpointer user_data) {
   g_print ("Properties changed on proxy at path %s, interface %s\n",
@@ -66,20 +139,6 @@ static void on_properties_changed(GDBusProxy *proxy, GVariant *changed_propertie
   g_variant_dict_unref(dict);
 }
 
-static void on_button_click(char * link_name) {
-  Link *L = (Link *)dict_find_kv(link_name, link_dict);
-  if (L == NULL) return;
-
-  if (L->button->active) {
-    printf("Trying to disconnect %s\n", L->button->link_name);
-    disconnect_proxy_device(L->proxy, NULL);
-  }
-  else {
-    printf("Trying to connect %s\n", L->button->link_name);
-    connect_proxy_device(L->proxy, NULL);
-  }
-}
-
 gboolean mouse_in_bounds(int x1, int y1, int x2, int y2) {
   Vector2 mouse_position = GetMousePosition();
 
@@ -91,55 +150,61 @@ int main(void)
 {
   Dictionary D = dict_new(BUTTONS);
   link_dict = &D;
+  GDBusProxy *device_manager_proxy = get_proxy_for_device_manager("/");
 
-  GDBusProxy *ATH_SQ1TW_proxy = get_proxy_for_device(ATH_SQ1TW);
-  subscribe_to_properties_changed_signal(ATH_SQ1TW_proxy, G_CALLBACK(on_properties_changed));
+  // Query ObjectManager for managed devices
+  GError *error;
+  error = NULL;
 
-  GDBusProxy *VARMILLO_proxy = get_proxy_for_device(VARMILLO);
-  subscribe_to_properties_changed_signal(VARMILLO_proxy, G_CALLBACK(on_properties_changed));
+  GVariant *result = NULL;
+  result = g_dbus_proxy_call_sync(
+    device_manager_proxy,
+    "GetManagedObjects",
+    NULL,
+    G_DBUS_CALL_FLAGS_NONE,
+    -1,
+    NULL,
+    &error
+  );
 
-  connect_proxy_device(VARMILLO_proxy, NULL);
+  if (result == NULL) {
+    perror("Result was NULL");
+    exit(1);
+  }
 
-  Button ATH_SQ1TW_button = {
-    10,
-    10,
-    BUTTON_WIDTH,
-    BUTTON_HEIGHT,
-    "ATH_SQ1TW",
-    ATH_SQ1TW,
-    GREEN,
-    WHITE,
-    .active = is_device_connected(ATH_SQ1TW_proxy),
-    on_button_click,
-  };
+  printf("Variant type: %s", g_variant_get_type_string(result));
 
-  Button VARMILLO_button = {
-    10,
-    BUTTON_HEIGHT + 20,
-    BUTTON_WIDTH,
-    BUTTON_HEIGHT,
-    "VARMILLO",
-    VARMILLO,
-    GREEN,
-    WHITE,
-    .active = is_device_connected(VARMILLO_proxy),
-    on_button_click,
-  };
+  int devices = 0;
 
-  Link ATH_SQ1TW_link = {
-    .proxy = ATH_SQ1TW_proxy,
-    .button = &ATH_SQ1TW_button,
-  };
+  // Get the number of devices required
+  GVariantIter iter;
+  GVariant *value;
+  gchar *key;
 
-  Link VARMILLO_link = {
-    .proxy = VARMILLO_proxy,
-    .button = &VARMILLO_button,
-  };
+  result = g_variant_get_child_value(result, 0);
+  g_variant_iter_init(&iter, result);
+  while (g_variant_iter_loop(&iter, "{&o@a{sa{sv}}}", &key, &value)) {
+    if (strlen(key) == OBJECT_PATH_LENGTH) devices++;
+  }
+  // ----------------------------------------
 
-  dict_insert_kv(ATH_SQ1TW, &ATH_SQ1TW_link, link_dict);  
-  dict_insert_kv(VARMILLO, &VARMILLO_link, link_dict);  
+  printf("Devices: %d\n", devices);
 
-  InitWindow(BUTTON_WIDTH + 20, 2 * BUTTON_HEIGHT - 5, "raylib window");
+  Button *button = (Button *)malloc(devices * sizeof(Button));
+  Link *linker = (Link *)malloc(devices * sizeof(Link));
+  GDBusProxy **device_proxy;
+  device_proxy = malloc(devices * sizeof(GDBusProxy *));
+
+  if (button == NULL || linker == NULL || device_proxy == NULL) {
+    printf("Could not allocate memory\n");
+  }
+
+  create_device_objects(result, button, linker, device_proxy);
+  for (int i = 0; i < devices; i++) {
+    dict_insert_kv(linker[i].button->link_name, &linker[i], link_dict);
+  }
+
+  InitWindow(BUTTON_WIDTH + 20, devices * (BUTTON_HEIGHT), "raylib window");
   while (!WindowShouldClose()) {
 
     if (IsMouseButtonPressed(0)) {
@@ -174,8 +239,10 @@ int main(void)
 
   }
 
-  g_object_unref(ATH_SQ1TW_proxy);
-  g_object_unref(VARMILLO_proxy);
+  free(button);
+  free(linker);
+  free(device_proxy);
+
   free(link_dict->dict);
   CloseWindow();
 

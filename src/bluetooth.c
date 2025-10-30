@@ -59,6 +59,30 @@ GDBusProxy* get_proxy_for_device(gchar* device_path) {
   return device_proxy;
 }
 
+GDBusProxy* get_proxy_for_device_manager(gchar* device_path) {
+  GError *error;
+  error = NULL;
+
+  GDBusProxy *device_manager_proxy = g_dbus_proxy_new_for_bus_sync(
+    G_BUS_TYPE_SYSTEM,
+    G_DBUS_PROXY_FLAGS_NONE,
+    NULL,
+    "org.bluez",
+    device_path,
+    "org.freedesktop.DBus.ObjectManager",
+    NULL,
+    &error
+  );
+
+  if (device_manager_proxy == NULL) {
+    g_printerr("Error creating proxy: %s\n", error->message);
+    g_error_free(error);
+    exit(1);
+  }
+
+  return device_manager_proxy;
+}
+
 const gchar* get_alias_for_device_proxy(GDBusProxy *proxy) {
   GVariant* variant = g_dbus_proxy_get_cached_property (
     proxy,
