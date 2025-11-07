@@ -35,6 +35,29 @@ void disconnect_proxy_device(GDBusProxy *proxy, GAsyncReadyCallback callback) {
   );
 }
 
+GDBusProxy* get_proxy_for_object(gchar* object_path, gchar* interface) {
+  GError *error;
+  error = NULL;
+  
+  GDBusProxy *object_proxy = g_dbus_proxy_new_for_bus_sync(
+    G_BUS_TYPE_SYSTEM,
+    G_DBUS_PROXY_FLAGS_NONE,
+    NULL,
+    "org.bluez",
+    object_path,
+    interface,
+    NULL,
+    &error
+  );
+
+  if (object_proxy == NULL) {
+    g_printerr("Error creating proxy: %s\n", error->message);
+    exit(1);
+  }
+
+  return object_proxy;
+}
+
 GDBusProxy* get_proxy_for_device(gchar* device_path) {
   GError *error;
   error = NULL;

@@ -6,6 +6,7 @@
 
 void connect_proxy_device(GDBusProxy *proxy, GAsyncReadyCallback callback);
 void disconnect_proxy_device(GDBusProxy *proxy, GAsyncReadyCallback callback);
+GDBusProxy* get_proxy_for_object(gchar* object_path, gchar* interface);
 GDBusProxy* get_proxy_for_device(gchar* device_path);
 GDBusProxy* get_proxy_for_device_manager(gchar* device_path);
 const gchar* get_alias_for_device_proxy(GDBusProxy *proxy);
