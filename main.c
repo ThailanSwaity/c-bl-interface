@@ -195,24 +195,8 @@ static void on_device_appeared(GDBusConnection *sig, const gchar *sender_name, c
   while (g_variant_iter_next(interfaces, "{&s@a{sv}}", &interface_name, &properties)) {
     if (g_strstr_len(g_ascii_strdown(interface_name, -1), -1, "device")) {
 
-      global_button_array[i].x = 10;
-      global_button_array[i].y = 10 + (BUTTON_HEIGHT + 10) * i;
-      global_button_array[i].width = BUTTON_WIDTH;
-      global_button_array[i].height = BUTTON_HEIGHT;
-      global_button_array[i].link_name = object;
-      global_button_array[i].active_color = GREEN;
-      global_button_array[i].inactive_color = WHITE;
-      global_button_array[i].active = false;
-      global_button_array[i].on_click = on_button_click;
+      gchar *object_name = object;
 
-      global_device_proxy_array[i] = get_proxy_for_device(object);
-      subscribe_to_properties_changed_signal(global_device_proxy_array[i], G_CALLBACK(on_properties_changed));
-
-      global_link_array[i].proxy = global_device_proxy_array[i];
-      global_link_array[i].button = &global_button_array[i];
-      sprintf(global_button_array[i].text, object);
-
-      g_print("Device [ %s ] appeared!\n", object);
       const gchar *property_name;
       GVariantIter ii;
       GVariant *prop_val;
@@ -220,11 +204,35 @@ static void on_device_appeared(GDBusConnection *sig, const gchar *sender_name, c
       while (g_variant_iter_next(&ii, "{&sv}", &property_name, &prop_val)) {
         if (strcmp(property_name, "Name") == 0) {
           g_print("Name: %s\n", g_variant_get_string(prop_val, NULL));
-          sprintf(global_button_array[i].text, g_variant_get_string(prop_val, NULL));
+          object_name = g_variant_get_string(prop_val, NULL);
         }
       }
+      g_print("Device [ %s ] appeared!\n", object_name);
+
+      Link *link = (Link *)dict_find_kv(object, link_dict);
+
+      if (link == NULL) {
+        global_button_array[i].x = 10;
+        global_button_array[i].y = 10 + (BUTTON_HEIGHT + 10) * i;
+        global_button_array[i].width = BUTTON_WIDTH;
+        global_button_array[i].height = BUTTON_HEIGHT;
+        global_button_array[i].link_name = object;
+        global_button_array[i].active_color = GREEN;
+        global_button_array[i].inactive_color = WHITE;
+        global_button_array[i].active = false;
+        global_button_array[i].on_click = on_button_click;
+
+        global_device_proxy_array[i] = get_proxy_for_device(global_button_array->link_name);
+        subscribe_to_properties_changed_signal(global_device_proxy_array[i], G_CALLBACK(on_properties_changed));
+
+        global_link_array[i].proxy = global_device_proxy_array[i];
+        global_link_array[i].button = &global_button_array[i];
+        sprintf(global_button_array[i].text, object_name);
+
+        dict_insert_kv(global_link_array[i].button->link_name, &global_link_array[i], link_dict);
+      }
+
       g_variant_unref(prop_val);
-      dict_insert_kv(global_link_array[i].button->link_name, &global_link_array[i], link_dict);
     }
     g_variant_unref(properties);
   }
@@ -244,9 +252,9 @@ static void on_device_disappeared(GDBusConnection *sig, const gchar *sender_name
   g_variant_get(parameters, "(&oas)", &object, &interfaces);
   while(g_variant_iter_next(interfaces, "s", &interface_name)) {
     if(g_strstr_len(g_ascii_strdown(interface_name, -1), -1, "device")) {
-      g_print("\nDevice %s removed\n", object);
+      g_print("\nDevice %s disappeared\n", object);
       // Remove proxy, unsubscribe to properties changed, fix multiple clicks being registered
-      dict_delete_kv(object, link_dict);
+      // dict_delete_kv(object, link_dict);
     }
   }
 }
@@ -365,19 +373,8 @@ int main(void)
   }
 
 
-  InitWindow(BUTTON_WIDTH + 20, 1080, "raylib window");
+  InitWindow(BUTTON_WIDTH + 20, 800, "raylib window");
   while (!WindowShouldClose()) {
-
-    if (IsMouseButtonPressed(0)) {
-      for (int i = 0; i < (int)link_dict->size; i++) {
-        Link *L = (Link *)link_dict->dict[i].value;
-        Button *button = L->button;
-        if (button->on_click == NULL) continue;
-        if (mouse_in_bounds(button->x, button->y, button->x + button->width, button->y + button->height)) {
-          button->on_click(button->link_name);
-        }
-      }
-    }
 
     BeginDrawing();
 
@@ -386,6 +383,12 @@ int main(void)
     for (int i = 0; i < (int)link_dict->size; i++) {
       Link *L = (Link *)link_dict->dict[i].value;
       Button *button = L->button;
+
+      if (IsMouseButtonPressed(0)) {
+        if (mouse_in_bounds(button->x, button->y, button->width, button->y + button->height))
+          button->on_click(button->link_name);
+      }
+
       DrawRectangleLines(
         button->x,
         button->y,
@@ -393,7 +396,7 @@ int main(void)
         button->height,
         button->active ? button->active_color : button->inactive_color
       );
-      DrawText(button->text, button->x + 40, button->y + button->height / 2, 20, WHITE);
+      DrawText(button->text, button->x + 40, button->y, 20, WHITE);
     }
 
     EndDrawing();

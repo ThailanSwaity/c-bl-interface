@@ -41,6 +41,9 @@ void dict_insert_kv(char *key, void *value, Dictionary *D) {
   for (i = 0; i < (int)D->size; i++) {
     M = strlen(D->dict[i].key);
     if (strcmp(key, D->dict[i].key) < 0) M = strlen(key);
+    if (strcmp(key, D->dict[i].key) == 0) {
+      printf("Key: %s, New key: %s", D->dict[i].key, key);
+    }
     assert(strcmp(key, D->dict[i].key) != 0);
     for (k = 0; k < M; k++) {
       if (key[k] != D->dict[i].key[k]) break;
