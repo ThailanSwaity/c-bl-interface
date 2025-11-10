@@ -10,9 +10,10 @@
 #define VARMILLO  "/org/bluez/hci0/dev_F3_06_1B_9B_89_22"
 #define OBJECT_PATH_LENGTH 37
 
-#define BUTTON_WIDTH 600
-#define BUTTON_HEIGHT 40
+#define BUTTON_WIDTH 290
+#define BUTTON_HEIGHT 30
 #define MAX_DEVICES 100
+#define MAX_ROWS 23
 
 typedef struct Button {
   int x;
@@ -53,11 +54,39 @@ static void on_button_click(char * link_name) {
   }
 }
 
+static void initialize(Button *button, Link *linker, GDBusProxy **device_proxy, int i, const gchar *object_path, const gchar *object_name) {
+  int x_off = (BUTTON_WIDTH + 5) * (i / MAX_ROWS);
+  int y_off = (BUTTON_HEIGHT + 5) * (i % MAX_ROWS);
+
+  button[i].x = 10 + x_off; 
+  button[i].y = 10 + y_off;
+  button[i].width = BUTTON_WIDTH; 
+  button[i].height = BUTTON_HEIGHT;
+  button[i].link_name = object_path; 
+  button[i].active_color = GREEN; 
+  button[i].inactive_color = WHITE; 
+  button[i].active = false;
+  button[i].on_click = on_button_click;
+
+  device_proxy[i] = get_proxy_for_device(object_path);
+  subscribe_to_properties_changed_signal(device_proxy[i], G_CALLBACK(on_properties_changed));
+
+  linker[i].proxy = device_proxy[i];
+  linker[i].button = &button[i];
+  sprintf(button[i].text, object_name);
+}
+
+static void deinitialize(GDBusProxy **device_proxy, int i) {
+  // unsubscribe to the properties changed signal and clean up memory if needed
+}
+
 static void create_device_objects(GVariant *result, Button *button, Link *linker, GDBusProxy **device_proxy) {
   GVariantIter iter;
   GVariant *value;
   gchar *key;
   int i = 0;
+  int x_off = BUTTON_WIDTH * (i / MAX_ROWS);
+  int y_off = BUTTON_HEIGHT * (i % MAX_ROWS);
 
   g_variant_iter_init(&iter, result);
   while (g_variant_iter_loop(&iter, "{&o@a{sa{sv}}}", &key, &value)) {
@@ -66,22 +95,7 @@ static void create_device_objects(GVariant *result, Button *button, Link *linker
     GVariant *interface_value;
     if (strlen(key) == OBJECT_PATH_LENGTH) {
 
-      button[i].x = 10; 
-      button[i].y = 10 + (BUTTON_HEIGHT + 10) * i;
-      button[i].width = BUTTON_WIDTH; 
-      button[i].height = BUTTON_HEIGHT;
-      button[i].link_name = key; 
-      button[i].active_color = GREEN; 
-      button[i].inactive_color = WHITE; 
-      button[i].active = false;
-      button[i].on_click = on_button_click;
-
-      device_proxy[i] = get_proxy_for_device(key);
-      subscribe_to_properties_changed_signal(device_proxy[i], G_CALLBACK(on_properties_changed));
-
-      linker[i].proxy = device_proxy[i];
-      linker[i].button = &button[i];
-      sprintf(button[i].text, key);
+      initialize(button, linker, device_proxy, i, key, key);
 
       g_variant_iter_init(&iiter, value);
       g_print("Item '%s' has type '%s'\n", key, g_variant_get_type_string(value));
@@ -190,6 +204,7 @@ static void on_device_appeared(GDBusConnection *sig, const gchar *sender_name, c
   GVariant *properties;
 
   int i = link_dict->size;
+  int x_off = i / MAX_ROWS;
 
   g_variant_get(parameters, "(&oa{sa{sv}})", &object, &interfaces);
   while (g_variant_iter_next(interfaces, "{&s@a{sv}}", &interface_name, &properties)) {
@@ -212,23 +227,7 @@ static void on_device_appeared(GDBusConnection *sig, const gchar *sender_name, c
       Link *link = (Link *)dict_find_kv(object, link_dict);
 
       if (link == NULL) {
-        global_button_array[i].x = 10;
-        global_button_array[i].y = 10 + (BUTTON_HEIGHT + 10) * i;
-        global_button_array[i].width = BUTTON_WIDTH;
-        global_button_array[i].height = BUTTON_HEIGHT;
-        global_button_array[i].link_name = object;
-        global_button_array[i].active_color = GREEN;
-        global_button_array[i].inactive_color = WHITE;
-        global_button_array[i].active = false;
-        global_button_array[i].on_click = on_button_click;
-
-        global_device_proxy_array[i] = get_proxy_for_device(global_button_array->link_name);
-        subscribe_to_properties_changed_signal(global_device_proxy_array[i], G_CALLBACK(on_properties_changed));
-
-        global_link_array[i].proxy = global_device_proxy_array[i];
-        global_link_array[i].button = &global_button_array[i];
-        sprintf(global_button_array[i].text, object_name);
-
+        initialize(global_button_array, global_link_array, global_device_proxy_array, i, object, object_name);
         dict_insert_kv(global_link_array[i].button->link_name, &global_link_array[i], link_dict);
       }
 
@@ -373,7 +372,7 @@ int main(void)
   }
 
 
-  InitWindow(BUTTON_WIDTH + 20, 800, "raylib window");
+  InitWindow(3 * (BUTTON_WIDTH) + 20, 800, "raylib window");
   while (!WindowShouldClose()) {
 
     BeginDrawing();
@@ -396,7 +395,7 @@ int main(void)
         button->height,
         button->active ? button->active_color : button->inactive_color
       );
-      DrawText(button->text, button->x + 40, button->y, 20, WHITE);
+      DrawText(button->text, button->x + 40, button->y + 10, 10, WHITE);
     }
 
     EndDrawing();
