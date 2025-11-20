@@ -11,6 +11,8 @@ GDBusProxy* get_proxy_for_device(gchar* device_path);
 GDBusProxy* get_proxy_for_device_manager(gchar* device_path);
 const gchar* get_alias_for_device_proxy(GDBusProxy *proxy);
 gboolean is_device_connected(GDBusProxy *proxy);
+GVariant* get_device_property(GDBusProxy *proxy, const gchar *property_name);
+gboolean is_interface_on(GDBusProxy *proxy);
 void subscribe_to_properties_changed_signal(GDBusProxy* proxy, GCallback callback);
 
 #endif // BLUETOOTH_H

@@ -127,6 +127,12 @@ const gchar* get_alias_for_device_proxy(GDBusProxy *proxy) {
 
 gboolean is_device_connected(GDBusProxy *proxy) {
   const gchar* property_name = "Connected";
+  GVariant* variant = get_device_property(proxy, property_name);
+  gboolean is_connected = g_variant_get_boolean(variant);
+  return is_connected;
+}
+
+GVariant* get_device_property(GDBusProxy *proxy, const gchar *property_name) {
   GVariant* variant = g_dbus_proxy_get_cached_property(
     proxy,
     property_name
@@ -135,10 +141,14 @@ gboolean is_device_connected(GDBusProxy *proxy) {
     g_printerr("Could not get device property: %s", property_name);
     exit(1);
   }
-  gboolean is_connected = g_variant_get_boolean(
-    variant
-  );
-  return is_connected;
+  return variant;
+}
+
+gboolean is_interface_on(GDBusProxy *proxy) {
+  const gchar* property_name = "Powered";
+  GVariant* variant = get_device_property(proxy, property_name);
+  gboolean is_on = g_variant_get_boolean(variant);
+  return is_on;
 }
 
 void subscribe_to_properties_changed_signal(GDBusProxy* proxy, GCallback callback) {

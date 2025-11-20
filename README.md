@@ -1,5 +1,5 @@
 # c-bl-interface
-An extremely simple bluetooth GUI library on linux written in C. 
+An extremely simple bluetooth GUI application on linux written in C. 
 Works with BlueZ using glib's GDBus C bindings.
 
 I had been experiencing pain connecting and disconnecting common things like my earbuds.

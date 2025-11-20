@@ -271,6 +271,7 @@ int main(void)
   link_dict = &D;
   GDBusProxy *device_manager_proxy = get_proxy_for_device_manager("/");
   GDBusProxy *device_adapter_proxy = get_proxy_for_object("/org/bluez/hci0", "org.bluez.Adapter1");
+  gboolean bluetooth_interface_on = is_interface_on(device_adapter_proxy);
 
   GError *error;
   error = NULL;
@@ -375,8 +376,16 @@ int main(void)
   InitWindow(3 * (BUTTON_WIDTH) + 20, 800, "raylib window");
   while (!WindowShouldClose()) {
 
-    BeginDrawing();
+    if (!bluetooth_interface_on) {
+      BeginDrawing();
+      ClearBackground(RED);
+      DrawText("Bluetooth adapter not powered on...", 10, 10, 20, WHITE);
+      DrawText("Please turn on device power and restart application", 10, 30, 20, WHITE);
+      EndDrawing();
+      continue;
+    }
 
+    BeginDrawing();
     ClearBackground(BLACK);
 
     for (int i = 0; i < (int)link_dict->size; i++) {
